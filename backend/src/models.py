@@ -15,6 +15,19 @@ class Alias(Base):
 class Evidence(Base):
  __tablename__='evidence'
  id=Column(Integer,primary_key=True);alias_id=Column(Integer,ForeignKey('aliases.id'),nullable=False);reference=Column(String(100),unique=True,nullable=False);description=Column(String(500),nullable=False)
+class VerifiedPair(Base):
+ __tablename__='verified_pairs'
+ __table_args__=(UniqueConstraint('street','left_text','right_text',name='uq_verified_pair'),)
+ id=Column(Integer,primary_key=True);street=Column(String(80),nullable=False);left_text=Column(String(120),nullable=False);right_text=Column(String(120),nullable=False);same=Column(Integer,nullable=False);note=Column(String(300),default='')
+class RuleVersion(Base):
+ __tablename__='rule_versions'
+ id=Column(Integer,primary_key=True);version=Column(Integer,unique=True,nullable=False);state=Column(String(20),default='queued',nullable=False);params=Column(JSON,nullable=False);attempt=Column(Integer,default=1,nullable=False)
+ threshold=Column(Float,nullable=True);train_streets=Column(JSON,nullable=True);holdout_streets=Column(JSON,nullable=True);train_pairs=Column(Integer,default=0);holdout_pairs=Column(Integer,default=0)
+ precision=Column(Float,nullable=True);recall=Column(Float,nullable=True);false_merge=Column(Integer,nullable=True);miss_merge=Column(Integer,nullable=True);holdout_detail=Column(JSON,nullable=True);baseline=Column(JSON,nullable=True)
+ sample_ids=Column(JSON,nullable=True);holdout_ids=Column(JSON,nullable=True);source_sha256=Column(String(64),default='');decision=Column(String(500),default='');error=Column(String(500),default='');created=Column(String(32),default='')
+class RuleActivation(Base):
+ __tablename__='rule_activations'
+ id=Column(Integer,primary_key=True);version_id=Column(Integer,ForeignKey('rule_versions.id'),unique=True,nullable=False);previous_version_id=Column(Integer,nullable=True);activated=Column(String(32),nullable=False);note=Column(String(500),default='')
 class MatchRun(Base):
  __tablename__='match_runs'
  id=Column(Integer,primary_key=True);state=Column(String(20),default='queued');result=Column(JSON,nullable=True);error=Column(String(500),default='')

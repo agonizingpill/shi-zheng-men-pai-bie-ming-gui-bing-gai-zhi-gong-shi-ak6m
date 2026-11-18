@@ -12,6 +12,10 @@ class AliasIn(Input):
  entrance_id:int;text:str=Field(min_length=3,max_length=120)
 class EvidenceIn(Input):
  alias_id:int;reference:str=Field(min_length=3,max_length=100);description:str=Field(min_length=8,max_length=500)
+class VerifiedPairIn(Input):
+ street:str=Field(min_length=2,max_length=80);left_text:str=Field(min_length=3,max_length=120);right_text:str=Field(min_length=3,max_length=120);same:Literal[0,1];note:str=Field(default='',max_length=300)
+class RuleIn(Input):
+ distance_threshold:float=Field(default=.55,gt=0,lt=2);candidate_floor:float=Field(default=.2,ge=0,lt=1);ngram_min:int=Field(default=1,ge=1,le=3);ngram_max:int=Field(default=3,ge=1,le=4);seed:int=Field(default=42,ge=0,le=100000)
 class ProposalIn(Input):
  code:str=Field(min_length=2,max_length=40);source_id:int;target_id:int;reason:str=Field(min_length=8,max_length=500)
 class ObjectionIn(Input):

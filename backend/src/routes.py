@@ -5,15 +5,18 @@ from .models import *
 from .schemas import *
 from .security import current,allow
 from .common import *
-from . import entrance_service as entrance,proposal_service as proposal,publication_service as publication,directory_service as directory
+from . import entrance_service as entrance,proposal_service as proposal,publication_service as publication,directory_service as directory,rule_service as rules
 router=APIRouter()
 def change(u,action,fn,supervisor=False):
  allow(u,*(['supervisor'] if supervisor else ['operator','supervisor']))
  with Session() as s:
   x=fn(s);log(s,u,action,dump(x));s.commit();return dump(x)
+def enqueue(job):
+ try:redis.from_url(os.environ['REDIS_URL']).rpush('address:matching',job)
+ except Exception:fail('计算队列不可达，可重新提交')
 @router.get('/register')
 def register(u=Depends(current)):
- with Session() as s:return {name:[dump(x) for x in rows(s,cls)] for name,cls in [('entrances',Entrance),('aliases',Alias),('evidence',Evidence),('runs',MatchRun),('candidates',Candidate),('proposals',Proposal),('objections',Objection),('notices',Notice),('redirects',Redirect),('clock',Registry)]}
+ with Session() as s:return {name:[dump(x) for x in rows(s,cls)] for name,cls in [('entrances',Entrance),('aliases',Alias),('evidence',Evidence),('pairs',VerifiedPair),('rules',RuleVersion),('activations',RuleActivation),('runs',MatchRun),('candidates',Candidate),('proposals',Proposal),('objections',Objection),('notices',Notice),('redirects',Redirect),('clock',Registry)]}
 @router.get('/audit')
 def audit(u=Depends(current)):
  with Session() as s:return [dump(x) for x in rows(s,Audit)]
@@ -29,11 +32,35 @@ def evidence(d:EvidenceIn,u=Depends(current)):return change(u,'登记证据',lam
 def matching(u=Depends(current)):
  def create(s):lock(s);x=MatchRun(state='queued');s.add(x);s.flush();return x
  d=change(u,'匹配别名',create)
- try:redis.from_url(os.environ['REDIS_URL']).rpush('address:matching',d['id'])
- except Exception:
+ try:enqueue('run:'+str(d['id']))
+ except HTTPException:
   with Session() as s:x=s.get(MatchRun,d['id']);x.state='failed';x.error='匹配队列不可达，可重新提交';s.commit()
   fail('匹配队列不可达，可重新提交')
  return d
+@router.post('/pairs')
+def paircreate(d:VerifiedPairIn,u=Depends(current)):return change(u,'登记核定别名对',lambda s:rules.create_pair(s,d.model_dump()))
+@router.post('/rules')
+def rulecreate(d:RuleIn|None=None,u=Depends(current)):
+ d=change(u,'校准匹配规则',lambda s:rules.create(s,d.model_dump() if d else None),True)
+ return queue_rule(d)
+@router.post('/rules/{id}/retry')
+def ruleretry(id:int,u=Depends(current)):
+ d=change(u,'重试规则评估',lambda s:rules.retry(s,id),True)
+ return queue_rule(d)
+def queue_rule(d):
+ try:enqueue('rule:'+str(d['id']));return d
+ except HTTPException:
+  with Session() as s:
+   x=s.get(RuleVersion,d['id'])
+   if x and x.state in ['queued','running']:
+    x.state='failed';x.error='计算队列不可达，可重新提交';s.commit();return dump(x)
+  fail('计算队列不可达，可重新提交')
+@router.post('/rules/{id}/activate')
+def ruleactivate(id:int,u=Depends(current)):
+ def activate(s):
+  r=lock(s);x,a=rules.activate(s,id,r.now)
+  return a if a is not None else x
+ d=change(u,'启用匹配规则',activate,True);return d
 @router.post('/proposals')
 def pcreate(d:ProposalIn,u=Depends(current)):return change(u,'归并提案',lambda s:proposal.create(s,d.model_dump()))
 @router.post('/objections')

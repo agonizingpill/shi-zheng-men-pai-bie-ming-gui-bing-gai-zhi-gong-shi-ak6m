@@ -1,6 +1,7 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker,DeclarativeBase
-engine=create_engine(os.environ['DATABASE_URL'],pool_pre_ping=True,isolation_level='READ COMMITTED')
+_url=os.environ['DATABASE_URL']
+engine=create_engine(_url,pool_pre_ping=True,**({'connect_args':{'check_same_thread':False}} if _url.startswith('sqlite') else {'isolation_level':'READ COMMITTED'}))
 Session=sessionmaker(engine,expire_on_commit=False)
 class Base(DeclarativeBase):pass
